@@ -1,0 +1,61 @@
+
+name: Deploy Website to AWS S3
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate website files
+        run: |
+          test -f index.html
+          test -f style.css
+          echo "Website files found."
+
+      - name: Check AWS configuration
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+        run: |
+          test -n "$AWS_ROLE_ARN" || (echo "AWS_ROLE_ARN secret is missing" && exit 1)
+          test -n "$AWS_REGION" || (echo "AWS_REGION variable is missing" && exit 1)
+          test -n "$S3_BUCKET" || (echo "S3_BUCKET variable is missing" && exit 1)
+          echo "Required GitHub settings are configured."
+
+      - name: Debug GitHub OIDC subject
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payload = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString()
+            );
+            core.info(`OIDC subject: ${payload.sub}`);
+            core.info(`OIDC audience: ${payload.aud}`);
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy website to S3
+        run: |
+          aws s3 sync . "s3://${{ vars.S3_BUCKET }}" \
+            --delete \
+            --exclude ".git/*" \
+            --exclude ".github/*"
