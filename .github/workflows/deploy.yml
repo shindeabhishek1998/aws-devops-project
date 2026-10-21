@@ -25,6 +25,17 @@ jobs:
           test -f style.css
           echo "Website files found."
 
+      - name: Check AWS configuration
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+        run: |
+          test -n "$AWS_ROLE_ARN" || (echo "AWS_ROLE_ARN secret is missing" && exit 1)
+          test -n "$AWS_REGION" || (echo "AWS_REGION variable is missing" && exit 1)
+          test -n "$S3_BUCKET" || (echo "S3_BUCKET variable is missing" && exit 1)
+          echo "Required GitHub settings are configured."
+
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
@@ -33,7 +44,7 @@ jobs:
 
       - name: Deploy website to S3
         run: |
-          aws s3 sync . s3://${{ vars.S3_BUCKET }} \
+          aws s3 sync . "s3://${{ vars.S3_BUCKET }}" \
             --delete \
             --exclude ".git/*" \
             --exclude ".github/*"
